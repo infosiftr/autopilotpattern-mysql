@@ -36,13 +36,13 @@ class Manta(object):
             signer=self.signer)
 
     @debug
-    def get_backup(self, backup_id):
+    def get_backup(self, backup_id, outfile_dir='/tmp/backup'):
         """ Download file from Manta, allowing exceptions to bubble up """
         try:
-            os.mkdir('/tmp/backup', 0770)
+            os.mkdir(outfile_dir, 0770)
         except OSError:
             pass
-        outfile = '/tmp/backup/{}'.format(backup_id)
+        outfile = os.path.join(outfile_dir, backup_id)
         mpath = '{}/{}'.format(self.bucket, backup_id)
         data = self.client.get_object(mpath)
         with open(outfile, 'w') as f:

@@ -7,7 +7,7 @@ import time
 
 from manager.utils import debug, env, log, to_flag, \
     WaitTimeoutError, UnknownPrimary, PRIMARY_KEY, LAST_BACKUP_KEY, \
-    BACKUP_TTL, BACKUP_LOCK_KEY, LAST_BINLOG_KEY
+    BACKUP_TTL, BACKUP_LOCK_KEY
 
 # pylint: disable=import-error,invalid-name,dangerous-default-value
 import consul as pyconsul
@@ -198,28 +198,6 @@ class Consul(object):
             log.debug('failover session lock (%s) not removed because '
                       'primary has not reported as healthy', session_id)
 
-
-
-
-    @debug(log_output=True)
-    def has_snapshot(self, timeout=600):
-        """ Ask Consul for 'last backup' key. """
-        while timeout > 0:
-            try:
-                result = self.client.kv.get(LAST_BACKUP_KEY)
-                if result[1]:
-                    return json.loads(result[1]['Value'])['id']
-                return None
-            except pyconsul.ConsulException:
-                # Consul isn't up yet
-                timeout -= 1
-                time.sleep(1)
-            except (KeyError, TypeError, ValueError):
-                raise # unexpected value / invalid JSON in Consul
-        raise WaitTimeoutError('Could not contact Consul to check '
-                               'for snapshot after %s seconds', timeout)
-
-
     @debug
     def lock_snapshot(self, hostname):
         """
@@ -256,37 +234,24 @@ class Consul(object):
             # we don't have a session file so just move on
             pass
 
-    @debug
-    def record_backup(self, backup_id, backup_time, binlog_file):
-        backup_val = {'id': backup_id, 'dt': backup_time}
-        self.put(LAST_BACKUP_KEY, json.dumps(backup_val))
-        self.put(LAST_BINLOG_KEY, binlog_file)
+    @debug(log_output=True)
+    def get_snapshot_data(self, timeout=600):
+        """ Ask Consul for 'last backup' data. """
+        while timeout > 0:
+            try:
+                result = self.client.kv.get(LAST_BACKUP_KEY)
+                if result[1]:
+                    return json.loads(result[1]['Value'])
+                return None
+            except pyconsul.ConsulException:
+                # Consul isn't up yet
+                timeout -= 1
+                time.sleep(1)
+            except (KeyError, TypeError, ValueError):
+                raise # unexpected value / invalid JSON in Consul
+        raise WaitTimeoutError('Could not contact Consul to check '
+                               'for snapshot after %s seconds', timeout)
 
     @debug
-    def is_snapshot_stale(self, binlog_file):
-        """ Check if it's time to do a snapshot """
-        if self._is_binlog_stale(binlog_file):
-            return True
-
-        result = self.get(LAST_BACKUP_KEY)
-        try:
-            dt = json.loads(result)['dt']
-        except (KeyError, TypeError, ValueError):
-            # TODO: should we log this and return True so we recover?
-            raise # unexpected value / invalid JSON in Consul
-
-        parsed_dt = datetime.strptime(dt, "%Y-%m-%dT%H:%M:%S.%f")
-        yesterday = datetime.utcnow() - timedelta(days=1)
-        if parsed_dt < yesterday:
-            return True
-
-        return False
-
-    @debug
-    def _is_binlog_stale(self, binlog_file):
-        """ Compare current binlog to that recorded w/ Consul """
-        try:
-            last_binlog_file = self.get(LAST_BINLOG_KEY)
-        except (IndexError, KeyError):
-            return True
-        return binlog_file != last_binlog_file
+    def record_snapshot_data(self, data):
+        self.put(LAST_BACKUP_KEY, json.dumps(data))

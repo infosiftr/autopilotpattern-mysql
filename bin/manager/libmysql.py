@@ -358,3 +358,21 @@ class MySQL(object):
         results = self.query('show master status')
         binlog_file = results[0]['File']
         return binlog_file
+
+    @debug
+    def is_snapshot_stale(self, consul_data, binlog):
+        """ Check if it's time to do a snapshot """
+        if consul_data.get('binlog') != binlog:
+            return True
+
+        dt = consul_data.get('dt')
+        if not dt:
+            return True
+
+        # this is the opposite of datetime_obj.isoformat()
+        parsed_dt = datetime.strptime(dt, "%Y-%m-%dT%H:%M:%S.%f")
+        yesterday = datetime.utcnow() - timedelta(days=1)
+        if parsed_dt < yesterday:
+            return True
+
+        return False
