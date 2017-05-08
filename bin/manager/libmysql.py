@@ -376,3 +376,20 @@ class MySQL(object):
             return True
 
         return False
+
+    @debug
+    def create_snapshot_file(self, workspace, backup_time, consol_data):
+        binlog = self.get_binlog()
+        if not self.is_snapshot_stale(self, consol_data, binlog):
+            return
+
+        backup_file = os.path.join(workspace, "backup.tar")
+        with open(backup_file, 'w') as f:
+            subprocess.check_call(['/usr/bin/innobackupex',
+                                   '--user={}'.format(self.repl_user),
+                                   '--password={}'.format(self.repl_password),
+                                   '--no-timestamp',
+                                   #'--compress',
+                                   '--stream=tar',
+                                   '/tmp/backup'], stdout=f)
+        return backup_file

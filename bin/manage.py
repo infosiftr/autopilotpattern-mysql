@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 # pylint: disable=invalid-name,no-self-use,dangerous-default-value
+from manager.libbackup import LocalBackup
 from manager.containerpilot import ContainerPilot
 from manager.libconsul import Consul
 from manager.libmanta import Manta
@@ -23,11 +24,12 @@ class Node(object):
     Node represents the state of our running container and carries
     around the MySQL config, and clients for Consul and Manta.
     """
-    def __init__(self, mysql=None, cp=None, consul=None, manta=None):
+    def __init__(self, mysql=None, cp=None, consul=None, manta=None, backupper=backupper):
         self.mysql = mysql
         self.consul = consul
         self.manta = manta
         self.cp = cp
+        self.backupper = backupper
 
         self.hostname = socket.gethostname()
         self.name = 'mysql-{}'.format(self.hostname)
@@ -89,6 +91,9 @@ class Node(object):
         """ check if we're the node that's going to execute the snapshot """
         # TODO: we want to have the replicas all do a lock on the snapshot task
         return self.is_primary()
+
+    def write_snapshot(self):
+        self.backupper.put_backup(self.mysql.create_snapshot_file)
 
 
 # ---------------------------------------------------------
@@ -234,46 +239,14 @@ def snapshot_task(node):
     if not node.is_snapshot_node() or not node.consul.lock_snapshot(node.name):
         return
 
-    binlog_file = node.mysql.get_binlog()
-    if node.consul.is_snapshot_stale(binlog_file):
-        # we'll let exceptions bubble up here. The task will fail
-        # and be logged, and when the BACKUP_LOCK_KEY expires we can
-        # alert on that externally.
-        try:
-            write_snapshot(node)
-        finally:
-            node.consul.unlock_snapshot()
+    # we'll let exceptions bubble up here. The task will fail
+    # and be logged, and when the BACKUP_LOCK_KEY expires we can
+    # alert on that externally.
+    try:
+        node.write_snapshot()
+    finally:
+        node.consul.unlock_snapshot()
 
-
-@debug
-def write_snapshot(node):
-    """
-    Calls out to innobackupex to snapshot the DB, then pushes the file
-    to Manta and writes that the work is completed in Consul.
-    """
-    now = datetime.utcnow()
-    # we don't want .isoformat() here because of URL encoding
-    backup_id = now.strftime('{}'.format(BACKUP_NAME))
-    backup_time = now.isoformat()
-
-    with open('/tmp/backup.tar', 'w') as f:
-        subprocess.check_call(['/usr/bin/innobackupex',
-                               '--user={}'.format(node.mysql.repl_user),
-                               '--password={}'.format(node.mysql.repl_password),
-                               '--no-timestamp',
-                               #'--compress',
-                               '--stream=tar',
-                               '/tmp/backup'], stdout=f)
-    log.info('snapshot completed, uploading to object store')
-    node.manta.put_backup(backup_id, '/tmp/backup.tar')
-    log.info('snapshot uploaded to %s/%s', node.manta.bucket, backup_id)
-
-    # write the filename of the binlog to Consul so that we know if
-    # we've rotated since the last backup.
-    # query lets KeyError bubble up -- something's broken
-    results = node.mysql.query('show master status')
-    binlog_file = results[0]['File']
-    node.consul.record_backup(backup_id, backup_time, binlog_file)
 
 # ---------------------------------------------------------
 # run_as_* functions determine the top-level behavior of a node
@@ -360,7 +333,7 @@ def run_as_primary(node):
 
     # although backups will be run from any instance, we need to first
     # snapshot the primary so that we can bootstrap replicas.
-    write_snapshot(node)
+    node.write_snapshot()
     return True
 
 @debug
@@ -399,7 +372,8 @@ def main():
     manta = Manta()
     cp = ContainerPilot()
     cp.load()
-    node = Node(mysql=my, consul=consul, manta=manta, cp=cp)
+    backupper = LocalBackup(consul, "%Y_%m_%d_%H:%M")
+    node = Node(mysql=my, consul=consul, manta=manta, cp=cp, backupper=backupper)
 
     cmd(node)
 

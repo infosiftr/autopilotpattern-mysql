@@ -82,3 +82,13 @@ class MantaBackup(BaseBackup):
 
     def _get_backup(self, backup_id, workspace):
         manta.get_backup(backup_id, workspace)
+
+class LocalBackup(BaseBackup):
+    def __init__(self, consul, backup_id_fmt):
+        BaseBackup.__init__(self, consul, backup_id_fmt)
+
+    def _put_backup(self, infile, backup_id):
+        raise NotImplementedError
+
+    def _get_backup(self, backup_id, workspace):
+        raise NotImplementedError
