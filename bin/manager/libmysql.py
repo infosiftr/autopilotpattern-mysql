@@ -286,12 +286,11 @@ class MySQL(object):
         except (subprocess.CalledProcessError, OSError) as ex:
             log.error('mysql_tzinfo_to_sql returned error: %s', ex)
 
-    def restore_from_snapshot(self, filename):
+    def restore_from_snapshot(self, filename, workspace):
         """
         Use innobackupex to restore from a snapshot.
         """
-        self.make_datadir()
-        infile = '/tmp/backup/{}'.format(filename)
+        infile = os.path.join(workspace, filename)
         subprocess.check_call(['tar', '-xif', infile, '-C', '/tmp/backup'])
         subprocess.check_call(['/usr/bin/innobackupex',
                                '--force-non-empty-directories',
@@ -392,4 +391,5 @@ class MySQL(object):
                                    #'--compress',
                                    '--stream=tar',
                                    '/tmp/backup'], stdout=f)
+
         return backup_file

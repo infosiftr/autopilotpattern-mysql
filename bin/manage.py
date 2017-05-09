@@ -10,7 +10,6 @@ import sys
 from manager.libbackup import LocalBackup
 from manager.containerpilot import ContainerPilot
 from manager.libconsul import Consul
-from manager.libmanta import Manta
 from manager.libmysql import MySQL, MySQLError
 from manager.utils import \
     log, get_ip, debug, \
@@ -24,10 +23,9 @@ class Node(object):
     Node represents the state of our running container and carries
     around the MySQL config, and clients for Consul and Manta.
     """
-    def __init__(self, mysql=None, cp=None, consul=None, manta=None, backupper=backupper):
+    def __init__(self, mysql=None, cp=None, consul=None, backupper=None):
         self.mysql = mysql
         self.consul = consul
-        self.manta = manta
         self.cp = cp
         self.backupper = backupper
 
@@ -113,13 +111,11 @@ def pre_start(node):
     my.take_ownership()
     my.render()
     if not os.path.isdir(os.path.join(my.datadir, 'mysql')):
-        last_backup = node.consul.has_snapshot()
-        if last_backup:
-            node.manta.get_backup(last_backup)
-            my.restore_from_snapshot(last_backup)
+        if node.backupper.get_backup(my.restore_from_snapshot):
+            log.info('Restored from DB backup.')
         else:
             if not my.initialize_db():
-                log.info('Skipping database setup.')
+                log.info('Failed to initialize DB.')
 
 @debug
 def health(node):
@@ -369,11 +365,10 @@ def main():
             sys.exit(1)
 
     my = MySQL()
-    manta = Manta()
     cp = ContainerPilot()
     cp.load()
     backupper = LocalBackup(consul, "%Y_%m_%d_%H:%M")
-    node = Node(mysql=my, consul=consul, manta=manta, cp=cp, backupper=backupper)
+    node = Node(mysql=my, consul=consul, cp=cp, backupper=backupper)
 
     cmd(node)
 

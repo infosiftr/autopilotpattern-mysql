@@ -54,9 +54,9 @@ class BaseBackup(object):
         self.__clean_workspace(workspace)
 
     def get_backup(self, restore_func):
-        current_data = self.self.consul.get_snapshot_data() or {}
+        current_data = self.consul.get_snapshot_data() or {}
         backup_id = current_data.get('id')
-
+        datafile = None
         if backup_id:
             # make a space for backup storage to download the backup
             workspace = self.__make_workspace()
@@ -66,11 +66,13 @@ class BaseBackup(object):
             # make a new space for db so that it can extract if needed
             db_workspace = self.__make_workspace()
             # have the db restore from the given file
-            restore_func(datafile, db_workspace)
+            was_restored = restore_func(datafile, db_workspace)
 
             # clean up the workspaces
             self.__clean_workspace(db_workspace)
             self.__clean_workspace(workspace)
+
+        return datafile is not None
 
 class MantaBackup(BaseBackup):
     def __init__(self, consul, backup_id_fmt):
@@ -81,7 +83,7 @@ class MantaBackup(BaseBackup):
         self.manta.put_backup(backup_id, infile)
 
     def _get_backup(self, backup_id, workspace):
-        manta.get_backup(backup_id, workspace)
+        return manta.get_backup(backup_id, workspace)
 
 class LocalBackup(BaseBackup):
     def __init__(self, consul, backup_id_fmt):
