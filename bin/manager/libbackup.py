@@ -3,6 +3,7 @@ import os
 import shutil
 import tempfile
 from manager.libmanta import Manta
+from manager.utils import debug
 
 class BaseBackup(object):
     def __init__(self, consul, backup_id_fmt):
@@ -25,34 +26,40 @@ class BaseBackup(object):
             shutil.rmtree(self.workspace)
             self.workspace = None
 
-    def put_backup(self, backup_func):
-        # TODO get lock
-        # self.consul...
+    @debug
+    def put_backup(self, node_name, backup_func):
+        if not self.consul.lock_snapshot(node_name):
+            log.info('Unable to grab snapshot lock.')
+            return
         # get any previous backup info from consul
         previous_data = self.consul.get_snapshot_data()
+        if previous_data is None or 'extra' not in previous_data:
+            extra_data = None
+        else:
+            extra_data = previous_data['extra']
 
         # get time now so it is consistant throughout the backup process
         backup_time = datetime.utcnow()
         # backup_id generation from format string using time
-        backup_id = now.strftime('{}'.format(self.backup_id_fmt))
+        backup_id = backup_time.strftime('{}'.format(self.backup_id_fmt))
 
         # make a working space that the db can use
         # we'll clean it up at the end
-        workspace = self.__make_workspace()
+        self.__make_workspace()
 
         # have the db make a backup
-        infile, extra_data = backup_func(workspace, backup_time, previous_data['extra'])
+        infile, extra_data_p = backup_func(self.workspace, backup_time, extra_data)
 
         if infile:
             self._put_backup(infile, backup_id)
-            # TODO store backup info in consul
+            self.consul.record_snapshot_data({'id' : backup_id, 'dt' : backup_time.isoformat(), 'extra' : extra_data_p})
 
-        # TODO release lock
-        # self.consul...
+        self.consul.unlock_snapshot()
 
         # clean up
-        self.__clean_workspace(workspace)
+        self.__clean_workspace()
 
+    @debug
     def get_backup(self, restore_func):
         current_data = self.consul.get_snapshot_data() or {}
         backup_id = current_data.get('id')
@@ -89,8 +96,12 @@ class LocalBackup(BaseBackup):
     def __init__(self, consul, backup_id_fmt):
         BaseBackup.__init__(self, consul, backup_id_fmt)
 
+    @debug
     def _put_backup(self, infile, backup_id):
-        raise NotImplementedError
+        os.rename(infile, os.path.join('/tmp/backup', backup_id))
 
+    @debug
     def _get_backup(self, backup_id, workspace):
-        raise NotImplementedError
+        dstfile = os.path.join(workspace, backup_id)
+        os.rename(os.path.join('/tmp/backup', backup_id), dstfile)
+        return dstfile

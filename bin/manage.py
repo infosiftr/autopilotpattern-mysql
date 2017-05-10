@@ -91,7 +91,7 @@ class Node(object):
         return self.is_primary()
 
     def write_snapshot(self):
-        self.backupper.put_backup(self.mysql.create_snapshot_file)
+        self.backupper.put_backup(self.name, self.mysql.create_snapshot_file)
 
 
 # ---------------------------------------------------------

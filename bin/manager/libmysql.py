@@ -379,7 +379,7 @@ class MySQL(object):
     @debug
     def create_snapshot_file(self, workspace, backup_time, consol_data):
         binlog = self.get_binlog()
-        if not self.is_snapshot_stale(self, consol_data, binlog):
+        if consol_data is not None and not self.is_snapshot_stale(consol_data, binlog):
             return
 
         backup_file = os.path.join(workspace, "backup.tar")
@@ -392,4 +392,4 @@ class MySQL(object):
                                    '--stream=tar',
                                    '/tmp/backup'], stdout=f)
 
-        return backup_file
+        return backup_file, {'binlog' : binlog}
