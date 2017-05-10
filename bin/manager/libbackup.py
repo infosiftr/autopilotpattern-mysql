@@ -9,22 +9,12 @@ class BaseBackup(object):
     def __init__(self, consul, backup_id_fmt):
         self.consul = consul
         self.backup_id_fmt = backup_id_fmt
-        self.workspace = None
 
     def _put_backup(self, infile, backup_id):
         raise NotImplementedError
 
     def _get_backup(self, backup_id, workspace):
         raise NotImplementedError
-
-    def __make_workspace(self):
-        if not self.workspace:
-            self.workspace = tempfile.mkdtemp()
-
-    def __clean_workspace(self):
-        if self.workspace:
-            shutil.rmtree(self.workspace)
-            self.workspace = None
 
     @debug
     def put_backup(self, node_name, backup_func):
@@ -45,10 +35,10 @@ class BaseBackup(object):
 
         # make a working space that the db can use
         # we'll clean it up at the end
-        self.__make_workspace()
+        workspace = tempfile.mkdtemp()
 
         # have the db make a backup
-        infile, extra_data_p = backup_func(self.workspace, backup_time, extra_data)
+        infile, extra_data_p = backup_func(workspace, backup_time, extra_data)
 
         if infile:
             self._put_backup(infile, backup_id)
@@ -57,7 +47,7 @@ class BaseBackup(object):
         self.consul.unlock_snapshot()
 
         # clean up
-        self.__clean_workspace()
+        shutil.rmtree(workspace)
 
     @debug
     def get_backup(self, restore_func):
@@ -66,18 +56,18 @@ class BaseBackup(object):
         datafile = None
         if backup_id:
             # make a space for backup storage to download the backup
-            workspace = self.__make_workspace()
+            workspace = tempfile.mkdtemp()
             # download the backup file
             datafile = self._get_backup(backup_id, workspace)
 
             # make a new space for db so that it can extract if needed
-            db_workspace = self.__make_workspace()
+            db_workspace = tempfile.mkdtemp()
             # have the db restore from the given file
             was_restored = restore_func(datafile, db_workspace)
 
             # clean up the workspaces
-            self.__clean_workspace(db_workspace)
-            self.__clean_workspace(workspace)
+            shutil.rmtree(db_workspace)
+            shutil.rmtree(workspace)
 
         return datafile is not None
 
