@@ -42,7 +42,7 @@ class BaseBackup(object):
 
         if infile:
             self._put_backup(infile, backup_id)
-            self.consul.record_snapshot_data({'id' : backup_id, 'dt' : backup_time.isoformat(), 'extra' : extra_data_p})
+            self.consul.record_snapshot_data({'id' : backup_id, 'extra' : extra_data_p})
 
         self.consul.unlock_snapshot()
 

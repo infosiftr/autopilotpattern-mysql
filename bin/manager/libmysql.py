@@ -1,5 +1,6 @@
 """ autopilotpattern/mysql MySQL module """
 from collections import OrderedDict
+from datetime import datetime, timedelta
 import os
 import re
 import pwd
@@ -377,10 +378,10 @@ class MySQL(object):
         return False
 
     @debug
-    def create_snapshot_file(self, workspace, backup_time, consol_data):
+    def create_snapshot_file(self, workspace, backup_time, consul_data):
         binlog = self.get_binlog()
-        if consol_data is not None and not self.is_snapshot_stale(consol_data, binlog):
-            return
+        if consul_data is not None and not self.is_snapshot_stale(consul_data, binlog):
+            return None, None
 
         backup_file = os.path.join(workspace, "backup.tar")
         with open(backup_file, 'w') as f:
@@ -392,4 +393,4 @@ class MySQL(object):
                                    '--stream=tar',
                                    '/tmp/backup'], stdout=f)
 
-        return backup_file, {'binlog' : binlog}
+        return backup_file, {'binlog' : binlog, 'dt' : backup_time.isoformat()}
