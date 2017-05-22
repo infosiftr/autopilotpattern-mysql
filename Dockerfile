@@ -7,7 +7,7 @@ ENV CONTAINERPILOT file:///etc/containerpilot.json
 # ourselves in the same layer. This is gross but it saves ~100MB in the image
 RUN set -ex \
     && export buildDeps='python-dev gcc unzip' \
-    && export runDeps='python curl libffi-dev libssl-dev percona-xtrabackup ca-certificates' \
+    && export runDeps='python curl libffi-dev libssl-dev libxml2-dev libxslt-dev libcurl4-openssl-dev python-pycurl percona-xtrabackup ca-certificates' \
     && apt-get update \
     && apt-get install -y $buildDeps $runDeps --no-install-recommends \
     # \
@@ -23,6 +23,7 @@ RUN set -ex \
        python-Consul==0.4.7 \
        manta==2.5.0 \
        mock==2.0.0 \
+    && easy_install webdavclient \
     # \
     # Add Consul from https://releases.hashicorp.com/consul \
     # \

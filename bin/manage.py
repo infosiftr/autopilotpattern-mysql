@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 # pylint: disable=invalid-name,no-self-use,dangerous-default-value
-from manager.libbackup import LocalBackup
+from manager.libbackup import LocalBackup, WebDavBackup
 from manager.containerpilot import ContainerPilot
 from manager.libconsul import Consul
 from manager.libmysql import MySQL, MySQLError
@@ -367,7 +367,13 @@ def main():
     my = MySQL()
     cp = ContainerPilot()
     cp.load()
-    backupper = LocalBackup(consul, "%Y_%m_%d_%H:%M")
+    options = {
+        'webdav_hostname' : 'http://172.17.0.3/webdav',
+        'webdav_login' : 'test',
+        'webdav_password' : 'test',
+        'verbose' : True
+    }
+    backupper = WebDavBackup(consul, "%Y_%m_%d_%H:%M", options)
     node = Node(mysql=my, consul=consul, cp=cp, backupper=backupper)
 
     cmd(node)

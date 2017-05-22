@@ -2,6 +2,7 @@ from datetime import datetime
 import os
 import shutil
 import tempfile
+import webdav.client as wc
 from manager.libmanta import Manta
 from manager.utils import debug
 
@@ -95,3 +96,21 @@ class LocalBackup(BaseBackup):
         dstfile = os.path.join(workspace, backup_id)
         os.rename(os.path.join('/tmp/backup', backup_id), dstfile)
         return dstfile
+
+class WebDavBackup(BaseBackup):
+    def __init__(self, consul, backup_id_fmt, client_options):
+        BaseBackup.__init__(self, consul, backup_id_fmt)
+        self.webdav_client = wc.Client(client_options)
+        self.webdav_client.mkdir("backups")
+        self.webdav_client.mkdir("backups/mysql")
+
+    @debug
+    def _put_backup(self, infile, backup_id):
+        dstfile = os.path.join('backups/mysql', backup_id)
+        self.webdav_client.upload_sync(local_path=infile, remote_path=dstfile)
+
+    @debug
+    def _get_backup(self, backup_id, workspace):
+        srcfile = os.path.join('backups/mysql', backup_id)
+        dstfile = os.path.join(workspace, backup_id)
+        self.webdav_client.download_sync(remote_path=srcfile, local_path=dstfile)
